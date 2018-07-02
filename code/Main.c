@@ -1,3 +1,7 @@
+// TODO(Suhaib): Render using textures instead of copying again to buffer and rendering that buffer, perf based so late in the game
+
+// TODO(Suhaib): Ingotduce dirty and clean rectangle
+
 #include <glfw3.h>
 
 GLFWwindow* glwindow;
@@ -8,12 +12,13 @@ GLFWwindow* glwindow;
 #define WIDTH 640
 #define HEIGHT 480
 
+SUIEnvironment* environment;
 
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
     glViewport(0, 0, width, height);
-    UISetDimension(width, height);
+    SUISetDimension(environment, width, height);
     //glViewport(0, 0, width, -height);
 }
 
@@ -38,34 +43,90 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 {
     if (key == GLFW_KEY_V && action == GLFW_PRESS)
     {
-        SubDivide(UIGetHoverWindow(), VERTICAL);
+        __SUISubDivide(SUIGetHoverWindow(environment), VERTICAL);
     }
     
     if (key == GLFW_KEY_H && action == GLFW_PRESS)
     {
-        SubDivide(UIGetHoverWindow(), HORIZONTAL);
+        __SUISubDivide(SUIGetHoverWindow(environment), HORIZONTAL);
     }
     
     if (key == GLFW_KEY_D && action == GLFW_PRESS)
     {
-        UIDelete(UIGetHoverWindow());
+        __SUIDelete(environment, SUIGetHoverWindow(environment));
     }
     
 }
 
+
+void BottomSUIRender(SUIElement* element)
+{
+    uint32* buffer = element->buffer.buffer;
+    int32 width = element->buffer.width;
+    int32 height = element->buffer.height;
+    
+    uint32 r = 255;
+    uint32 b = 0;
+    uint32 g = 0;
+    
+    for (int y = 0; y < height; y++)
+    {
+        b = 0;
+        for (int x = 0; x < width; x++)
+        {
+            buffer[x + y * width] = (b | (g << 8) | (r << 16));
+            b = (b + 1) % 256;
+        }
+        g = (g + 1) % 256;
+    }
+}
+
+void LeftSUIRender(SUIElement* element)
+{
+    uint32* buffer = element->buffer.buffer;
+    int32 width = element->buffer.width;
+    int32 height = element->buffer.height;
+    
+    uint32 r = 0;
+    uint32 b = 255;
+    uint32 g = 0;
+    
+    for (int y = 0; y < height; y++)
+    {
+        r = 0;
+        for (int x = 0; x < width; x++)
+        {
+            buffer[x + y * width] = (b | (g << 8) | (r << 16));
+            r = (r + 1) % 256;
+        }
+        g = (g + 1) % 256;
+    }
+}
+
+void RightSUIRender(SUIElement* element)
+{
+    uint32* buffer = element->buffer.buffer;
+    int32 width = element->buffer.width;
+    int32 height = element->buffer.height;
+    
+    uint32 r = 0;
+    uint32 b = 0;
+    uint32 g = 255;
+    
+    for (int y = 0; y < height; y++)
+    {
+        r = 0;
+        for (int x = 0; x < width; x++)
+        {
+            buffer[x + y * width] = (b | (g << 8) | (r << 16));
+            r = (r + 1) % 256;
+        }
+        b = (b + 1) % 256;
+    }
+}
+
 int main()
 {
-    
-    //void* buff = malloc(100);
-    
-    //free(buff);
-    
-    //free(buff);
-    
-    
-    
-    
-    /* Initialize the library */
     if (!glfwInit())
         return -1;
     
@@ -77,10 +138,6 @@ int main()
         return -1;
     }
     
-    //GLFWcursor* newCursor = glfwCreateStandardCursor(GLFW_HRESIZE_CURSOR);
-    
-    
-    
     glfwSetFramebufferSizeCallback(glwindow, framebuffer_size_callback);
     glfwSetMouseButtonCallback(glwindow, mouse_button_callback);
     glfwSetKeyCallback(glwindow, key_callback);
@@ -88,8 +145,38 @@ int main()
     
     glfwGetWindowSize(glwindow, &width, &height);
     
-    UISetDimension(width, height);
-    UIInit();
+    environment = SUIInit();
+    
+    /*bottom element*/
+    SUIElement bottomUIElement = (SUIElement) {0};
+    
+    bottomUIElement.SUIRenderCallback = BottomSUIRender;
+    
+    /*Left Side*/
+    SUIElement leftUIElement = (SUIElement) {0};
+    
+    leftUIElement.SUIRenderCallback = LeftSUIRender;
+    
+    /*Right Side*/
+    SUIElement rightUIElement = (SUIElement) {0};
+    
+    rightUIElement.SUIRenderCallback = RightSUIRender;
+    
+    SUIContainer* completeUI = SUIGetRoot(environment);
+    
+    SUIContainer* hero;
+    SUIContainer* temp;
+    
+    SUIDock(completeUI, &bottomUIElement, DOCK_BOTTOM, &hero, &temp); 
+    
+    SUIContainer* rightElement;
+    
+    SUIDock(hero, &leftUIElement, DOCK_LEFT, &temp, &rightElement);
+    
+    SUIDock(rightElement, &rightUIElement, DOCK_COMPLETE, &temp, &temp);
+    
+    
+    SUISetDimension(environment, width, height);
     
     
     
@@ -108,18 +195,20 @@ int main()
         
         glfwGetCursorPos(glwindow, &xpos, &ypos);
         
-        UISetMouseState((int) xpos, (int) ypos, pressed);
+        SUISetMouseState(environment, (int) xpos, (int) ypos, pressed);
         
-        UIUpdate();
-        UIRender();
+        SUIUpdate(environment);
+        SUIRender(environment);
         
         
         
         glfwSwapBuffers(glwindow);
         glfwPollEvents();
+        
     }
     
     glfwTerminate();
+    
     
     return 0;
 }
