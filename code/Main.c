@@ -1,4 +1,8 @@
 #include <glfw3.h>
+
+GLFWwindow* glwindow;
+
+
 #include "UIFramework.c"
 
 #define WIDTH 640
@@ -42,6 +46,11 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         SubDivide(UIGetHoverWindow(), HORIZONTAL);
     }
     
+    if (key == GLFW_KEY_D && action == GLFW_PRESS)
+    {
+        UIDelete(UIGetHoverWindow());
+    }
+    
 }
 
 int main()
@@ -54,7 +63,7 @@ int main()
     //free(buff);
     
     
-    GLFWwindow* glwindow;
+    
     
     /* Initialize the library */
     if (!glfwInit())
@@ -67,6 +76,9 @@ int main()
         glfwTerminate();
         return -1;
     }
+    
+    //GLFWcursor* newCursor = glfwCreateStandardCursor(GLFW_HRESIZE_CURSOR);
+    
     
     
     glfwSetFramebufferSizeCallback(glwindow, framebuffer_size_callback);

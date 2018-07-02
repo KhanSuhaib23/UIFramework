@@ -22,8 +22,6 @@ typedef struct UIElement UIElement;
 typedef void (UIRenderCallbackFunction(UIElement*));
 
 
-//#define S2GL(cood) ((cood) * 2.0f - 1)
-
 float S2GL_W(float cood)
 {
     if (cood <= 0.5f)
@@ -173,6 +171,8 @@ SubWindow* UIInit()
 
 void SubDivide(SubWindow* window, Alignment align)
 {
+    if (window == NULL) return;
+    
     window->split = align;
     
     if (window->element != NULL)
@@ -796,44 +796,244 @@ SubWindow* GetSeperatingLineHover(SubWindow* window)
 
 SubWindow* currentWindowHeld = NULL;
 
+GLFWcursor* cursor;//glfwCreateStandardCursor(GLFW_HRESIZE_CURSOR);
+
+
+void UIDelete(SubWindow* window)
+{
+    
+    if (window == NULL) return;
+    // TODO(Suhaib): Terrible code again
+    
+    SubWindow* parent = window->parent;
+    
+    if (parent == NULL) return;
+    
+    SubWindow* gParent = parent->parent;
+    
+    if (gParent == NULL)
+    {
+        if (parent->first == window)
+        {
+            parent->second->x = root->x;
+            parent->second->y = root->y;
+            parent->second->width = root->width;
+            parent->second->height = root->height;
+            parent->second->ratioOfParent = root->ratioOfParent;
+            parent->second->parent = root->parent;
+            
+            root = parent->second;
+        }
+        else if (parent->second == window)
+        {
+            parent->first->x = root->x;
+            parent->first->y = root->y;
+            parent->first->width = root->width;
+            parent->first->height = root->height;
+            parent->first->ratioOfParent = root->ratioOfParent;
+            parent->first->parent = root->parent;
+            
+            root = parent->first;
+        }
+        
+        if (root->split == HORIZONTAL)
+        {
+            root->line.start = root->x;
+            root->line.end = root->x + root->width;
+            root->line.otherCood = root->y + root->height * root->first->ratioOfParent;
+            
+            ResizeWindow(root->first, TOP);
+            ResizeWindow(root->second, BOTTOM);
+        }
+        else if (root->split == VERTICAL)
+        {
+            root->line.start = root->y;
+            root->line.end = root->y + root->height;
+            root->line.otherCood = root->x + root->width * root->first->ratioOfParent;
+            
+            ResizeWindow(root->first, LEFT);
+            ResizeWindow(root->second, RIGHT);
+        }
+        
+        
+        
+        return;
+    }
+    
+    if (gParent->first == parent)
+    {
+        
+        
+        if (parent->first == window)
+        {
+            parent->second->x = gParent->first->x;
+            parent->second->y = gParent->first->y;
+            parent->second->width = gParent->first->width;
+            parent->second->height = gParent->first->height;
+            parent->second->ratioOfParent = gParent->first->ratioOfParent;
+            parent->second->parent = gParent;
+            
+            gParent->first = parent->second;
+        }
+        else if (parent->second == window)
+        {
+            parent->first->x = gParent->first->x;
+            parent->first->y = gParent->first->y;
+            parent->first->width = gParent->first->width;
+            parent->first->height = gParent->first->height;
+            parent->first->ratioOfParent = gParent->first->ratioOfParent;
+            parent->first->parent = gParent;
+            
+            gParent->first = parent->first;
+        }
+        
+        if (gParent->first->split == HORIZONTAL)
+        {
+            gParent->first->line.start = gParent->first->x;
+            gParent->first->line.end = gParent->first->x + gParent->first->width;
+            gParent->first->line.otherCood = gParent->first->y + gParent->first->height * gParent->first->first->ratioOfParent;
+            
+            ResizeWindow(gParent->first->first, TOP);
+            ResizeWindow(gParent->first->second, BOTTOM);
+        }
+        else if (gParent->first->split == VERTICAL)
+        {
+            gParent->first->line.start = gParent->first->y;
+            gParent->first->line.end = gParent->first->y + gParent->first->height;
+            gParent->first->line.otherCood = gParent->first->x + gParent->first->width * gParent->first->first->ratioOfParent;
+            
+            ResizeWindow(gParent->first->first, LEFT);
+            ResizeWindow(gParent->first->second, RIGHT);
+        }
+        
+        
+    }
+    else if (gParent->second == parent)
+    {
+        
+        if (parent->first == window)
+        {
+            parent->second->x = gParent->second->x;
+            parent->second->y = gParent->second->y;
+            parent->second->width = gParent->second->width;
+            parent->second->height = gParent->second->height;
+            parent->second->ratioOfParent = gParent->second->ratioOfParent;
+            parent->second->parent = gParent;
+            
+            gParent->second = parent->second;
+        }
+        else if (parent->second == window)
+        {
+            parent->first->x = gParent->second->x;
+            parent->first->y = gParent->second->y;
+            parent->first->width = gParent->second->width;
+            parent->first->height = gParent->second->height;
+            parent->first->ratioOfParent = gParent->second->ratioOfParent;
+            parent->first->parent = gParent;
+            
+            gParent->second = parent->first;
+        }
+        
+        if (gParent->second->split == HORIZONTAL)
+        {
+            gParent->second->line.start = gParent->second->x;
+            gParent->second->line.end = gParent->second->x + gParent->second->width;
+            gParent->second->line.otherCood = gParent->second->y + gParent->second->height * gParent->second->first->ratioOfParent;
+            
+            ResizeWindow(gParent->second->first, TOP);
+            ResizeWindow(gParent->second->second, BOTTOM);
+        }
+        else if (gParent->second->split == VERTICAL)
+        {
+            gParent->second->line.start = gParent->second->y;
+            gParent->second->line.end = gParent->second->y + gParent->second->height;
+            gParent->second->line.otherCood = gParent->second->x + gParent->second->width * gParent->second->first->ratioOfParent;
+            
+            ResizeWindow(gParent->second->first, LEFT);
+            ResizeWindow(gParent->second->second, RIGHT);
+        }
+        
+    }
+}
+
+DividingLine phantomLine;
+
 void UIUpdate()
 {
     
-    //printf("[%d, %d]\n", uiWidth, uiHeight);
-    
-    static int count = 0;
-    //printf("xPos : %d, yPos : %d, Pressed : %d\n", xPos, yPos, held);
+    // NOTE(Suhaib): Currently phantom line has no check, results in no known bugs but looks wierd
+    // TODO(Suhaib): Add bound check to phantom line
     
     SubWindow* window = GetSeperatingLineHover(root);
     
-    
-    if (!held)
-    {
-        currentWindowHeld = NULL;
-    }
-    
-    if (currentWindowHeld)
-    {
-        if (currentWindowHeld->split == VERTICAL)
-        {
-            UIMoveSeperatingLine(currentWindowHeld, xPos - pXPos);
-        }
-        else if (currentWindowHeld->split == HORIZONTAL)
-        {
-            UIMoveSeperatingLine(currentWindowHeld, yPos - pYPos);
-        }
-    }
-    else
+    if (held == 1 && pHeld == 0) // just clicked
     {
         if (window != NULL)
         {
-            if (held && !pHeld) 
+            currentWindowHeld = window;
+            phantomLine = window->line;
+        }
+    }
+    else if (held == 0 && pHeld == 1) // just released
+    {
+        if (currentWindowHeld != NULL)
+        {
+            if (currentWindowHeld->split == VERTICAL)
             {
-                currentWindowHeld = window;
+                UIMoveSeperatingLine(currentWindowHeld, (int) ((phantomLine.otherCood - currentWindowHeld->line.otherCood) * uiWidth));
+            }
+            else if (currentWindowHeld->split == HORIZONTAL)
+            {
+                UIMoveSeperatingLine(currentWindowHeld, (int) ((phantomLine.otherCood - currentWindowHeld->line.otherCood) * uiHeight));
+            }
+            currentWindowHeld = NULL;
+        }
+    }
+    else if (held == 1) // has held the button
+    {
+        if (currentWindowHeld != NULL)
+        {
+            if (currentWindowHeld->split == VERTICAL)
+            {
+                phantomLine.otherCood = (float) xPos / (float) uiWidth;
+            }
+            else if (currentWindowHeld->split == HORIZONTAL)
+            {
+                phantomLine.otherCood = (float) yPos / (float) uiHeight;
             }
         }
     }
+    else if (held == 0) // has no held the button
+    {
+        
+    }
     
+    cursor = glfwCreateStandardCursor(GLFW_ARROW_CURSOR);
+    
+    if (window != NULL)
+    {
+        if (window->split == VERTICAL)
+        {
+            cursor = glfwCreateStandardCursor(GLFW_HRESIZE_CURSOR);
+        }
+        else if (window->split == HORIZONTAL)
+        {
+            cursor = glfwCreateStandardCursor(GLFW_VRESIZE_CURSOR);
+        }
+    }
+    else if (currentWindowHeld != NULL)
+    {
+        if (currentWindowHeld->split == VERTICAL)
+        {
+            cursor = glfwCreateStandardCursor(GLFW_HRESIZE_CURSOR);
+        }
+        else if (currentWindowHeld->split == HORIZONTAL)
+        {
+            cursor = glfwCreateStandardCursor(GLFW_VRESIZE_CURSOR);
+        }
+    }
+    
+    glfwSetCursor(glwindow, cursor);
     
 }
 
@@ -912,26 +1112,31 @@ void UIRender()
     
     
     UIFillBuffer(root);
-    /*
-    int* buffer = fullscreen.buffer;
     
-    for (int i = 0; i < fullscreen.width * fullscreen.height; i++)
-    {
-    buffer[i] = 0xff000000;
-    }
-    
-    for (int y = 0; y < fullscreen.height / 2; y++)
-    {
-    for (int x = 0; x < fullscreen.width / 2; x++)
-    {
-    buffer[x + y * fullscreen.width] = 0xff00ff00;
-    }
-    }
-    */
     glDrawPixels(fullscreen.width, fullscreen.height, GL_RGBA, GL_UNSIGNED_BYTE, fullscreen.buffer);
     
     //UIFillWithStuff();
     UIDrawSeperatingLines();
+    
+    if (currentWindowHeld != NULL)
+    {
+        
+        glLineWidth(phantomLine.width); 
+        glColor3f(1.0, 1.0, 1.0);
+        glBegin(GL_LINES);
+        if (currentWindowHeld->split == VERTICAL)
+        {
+            glVertex3f(S2GL_W(phantomLine.otherCood), S2GL_H(phantomLine.start), 0.0f);
+            glVertex3f(S2GL_W(phantomLine.otherCood), S2GL_H(phantomLine.end), 0.0f);
+        }
+        else if (currentWindowHeld->split == HORIZONTAL)
+        {
+            glVertex3f(S2GL_W(phantomLine.start), S2GL_H(phantomLine.otherCood), 0.0f);
+            glVertex3f(S2GL_W(phantomLine.end), S2GL_H(phantomLine.otherCood), 0.0f);
+        }
+        glEnd();
+    }
+    
 }
 
 SubWindow* GetHoverWindow(SubWindow* window)
