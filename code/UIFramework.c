@@ -89,6 +89,7 @@ struct SUIElement
     uint32 texture;
     uint32 texID;
     int32 onDisplay;
+    int32 dirty;
 };
 
 
@@ -170,6 +171,9 @@ SUIElement* SUIGetValidUIElement()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    
+    element->onDisplay = 0;
+    element->dirty = 1;
     
     return element;
 }
@@ -404,15 +408,14 @@ internal void __SUISubDivide(SUIContainer* container, SUIAlignment align)
     
     container->split = align;
     
+    
     if (container->element != NULL)
     {
         free(container->element->buffer.buffer);
         container->element->buffer.buffer = NULL;
-        free(container->element);
+        
         container->element = NULL;
     }
-    
-    container->element = NULL;
     
     if (container->split == VERTICAL)
     {
@@ -445,13 +448,8 @@ internal void __SUISubDivide(SUIContainer* container, SUIAlignment align)
         
         first->ratioOfParent = 0.5f;
         
-        first->element = malloc(sizeof(SUIElement));
-        
-        first->element->buffer.buffer = NULL;
-        
-        first->element->SUIRenderCallback = SUIRenderCallbackStub;
-        
         first->parent = container;
+        
         
         second->x = container->x + container->width / 2;
         second->y = container->y;
@@ -466,12 +464,6 @@ internal void __SUISubDivide(SUIContainer* container, SUIAlignment align)
         second->split = NONE;
         
         second->ratioOfParent = 0.5f;
-        
-        second->element = malloc(sizeof(SUIElement));
-        
-        second->element->buffer.buffer = NULL;
-        
-        second->element->SUIRenderCallback = SUIRenderCallbackStub;
         
         second->parent = container;
         
@@ -509,12 +501,6 @@ internal void __SUISubDivide(SUIContainer* container, SUIAlignment align)
         
         first->ratioOfParent = 0.5f;
         
-        first->element = malloc(sizeof(SUIElement));
-        
-        first->element->buffer.buffer = NULL;
-        
-        first->element->SUIRenderCallback = SUIRenderCallbackStub;
-        
         first->parent = container;
         
         second->x = container->x;
@@ -530,12 +516,6 @@ internal void __SUISubDivide(SUIContainer* container, SUIAlignment align)
         second->split = NONE;
         
         second->ratioOfParent = 0.5f;
-        
-        second->element = malloc(sizeof(SUIElement));
-        
-        second->element->buffer.buffer = NULL;
-        
-        second->element->SUIRenderCallback = SUIRenderCallbackStub;
         
         second->parent = container;
         
@@ -563,12 +543,16 @@ SUIContainer* SUIGetRoot(SUIEnvironment* environment)
 }
 
 
-void SUIDock(SUIContainer* container, SUIElement* element, SUIDockType docType, SUIContainer** first, SUIContainer** second)
+void SUIDock(SUIEnvironment* environment, SUIContainer* container, SUIElement* element, SUIDockType docType, SUIContainer** first, SUIContainer** second)
 {
     // TODO(Suhaib): Add check for problems like trying to dock to a non leaf
     
     if (docType == DOCK_COMPLETE)
     {
+        element->buffer.width = (int32) (environment->fullUISpace.width * container->width);
+        element->buffer.height = (int32) (environment->fullUISpace.height * container->height);
+        element->onDisplay = 1;
+        
         container->element = element;
         
         *first = NULL;
@@ -581,6 +565,10 @@ void SUIDock(SUIContainer* container, SUIElement* element, SUIDockType docType, 
         *first = container->first;
         *second = container->second;
         
+        element->buffer.width = (int32) (environment->fullUISpace.width * container->first->width);
+        element->buffer.height = (int32) (environment->fullUISpace.height * container->first->height);
+        element->onDisplay = 1;
+        
         container->first->element = element;
         
     }
@@ -591,6 +579,10 @@ void SUIDock(SUIContainer* container, SUIElement* element, SUIDockType docType, 
         *first = container->first;
         *second = container->second;
         
+        element->buffer.width = (int32) (environment->fullUISpace.width * container->second->width);
+        element->buffer.height = (int32) (environment->fullUISpace.height * container->second->height);
+        element->onDisplay = 1;
+        
         container->second->element = element;
     }
     else if (docType == DOCK_TOP)
@@ -600,6 +592,10 @@ void SUIDock(SUIContainer* container, SUIElement* element, SUIDockType docType, 
         *first = container->first;
         *second = container->second;
         
+        element->buffer.width = (int32) (environment->fullUISpace.width * container->first->width);
+        element->buffer.height = (int32) (environment->fullUISpace.height * container->first->height);
+        element->onDisplay = 1;
+        
         container->first->element = element;
     }
     else if (docType == DOCK_BOTTOM)
@@ -608,6 +604,10 @@ void SUIDock(SUIContainer* container, SUIElement* element, SUIDockType docType, 
         
         *first = container->first;
         *second = container->second;
+        
+        element->buffer.width = (int32) (environment->fullUISpace.width * container->second->width);
+        element->buffer.height = (int32) (environment->fullUISpace.height * container->second->height);
+        element->onDisplay = 1;
         
         container->second->element = element;
     }
@@ -682,9 +682,6 @@ void __SUIDrawSeperatingLines(SUIEnvironment* environment, SUIContainer* contain
         environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x2, y2, 1.0f, 0.0f, 0.0f, 1.0f};
         environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x1, y2, 1.0f, 0.0f, 0.0f, 1.0f};
         
-        
-        //glVertex3f(S2GL_W(line.otherCood), S2GL_H(line.start), 0.0f);
-        //glVertex3f(S2GL_W(line.otherCood), S2GL_H(line.end), 0.0f);
     }
     else if (container->split == HORIZONTAL)
     {
@@ -705,17 +702,14 @@ void __SUIDrawSeperatingLines(SUIEnvironment* environment, SUIContainer* contain
         environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x2, y2, 1.0f, 0.0f, 0.0f, 1.0f};
         environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x1, y2, 1.0f, 0.0f, 0.0f, 1.0f};
         
-        //glVertex3f(S2GL_W(line.start), S2GL_H(line.otherCood), 0.0f);
-        //glVertex3f(S2GL_W(line.end), S2GL_H(line.otherCood), 0.0f);
     }
-    //glEnd();
     
     __SUIDrawSeperatingLines(environment, container->first);
     __SUIDrawSeperatingLines(environment, container->second);
     
 }
 
-void __SUIResizeWindow(SUIContainer* container, SUIChildDirection direction)
+void __SUIResizeWindow(SUIEnvironment* environment, SUIContainer* container, SUIChildDirection direction)
 {
     switch (direction)
     {
@@ -745,14 +739,15 @@ void __SUIResizeWindow(SUIContainer* container, SUIChildDirection direction)
             
             container->ratioOfParent = container->width / parent->width;
             
+            
             if (container->split == HORIZONTAL)
             {
                 container->line.start = container->x;
                 container->line.end = container->x + container->width;
                 container->line.otherCood = container->y + container->height * container->first->ratioOfParent;
                 
-                __SUIResizeWindow(container->first, TOP);
-                __SUIResizeWindow(container->second, BOTTOM);
+                __SUIResizeWindow(environment, container->first, TOP);
+                __SUIResizeWindow(environment, container->second, BOTTOM);
             }
             else if (container->split == VERTICAL)
             {
@@ -761,8 +756,8 @@ void __SUIResizeWindow(SUIContainer* container, SUIChildDirection direction)
                 
                 container->line.otherCood = container->x + container->width * container->first->ratioOfParent;
                 
-                __SUIResizeWindow(container->first, LEFT);
-                __SUIResizeWindow(container->second, RIGHT);
+                __SUIResizeWindow(environment, container->first, LEFT);
+                __SUIResizeWindow(environment, container->second, RIGHT);
             }
         }
         break;
@@ -798,8 +793,8 @@ void __SUIResizeWindow(SUIContainer* container, SUIChildDirection direction)
                 container->line.end = container->x + container->width;
                 container->line.otherCood = container->y + container->height * container->first->ratioOfParent;
                 
-                __SUIResizeWindow(container->first, TOP);
-                __SUIResizeWindow(container->second, BOTTOM);
+                __SUIResizeWindow(environment, container->first, TOP);
+                __SUIResizeWindow(environment, container->second, BOTTOM);
             }
             else if (container->split == VERTICAL)
             {
@@ -808,8 +803,8 @@ void __SUIResizeWindow(SUIContainer* container, SUIChildDirection direction)
                 
                 container->line.otherCood = container->x + container->width * container->first->ratioOfParent;
                 
-                __SUIResizeWindow(container->first, LEFT);
-                __SUIResizeWindow(container->second, RIGHT);
+                __SUIResizeWindow(environment, container->first, LEFT);
+                __SUIResizeWindow(environment, container->second, RIGHT);
             }
         }
         break;
@@ -845,8 +840,8 @@ void __SUIResizeWindow(SUIContainer* container, SUIChildDirection direction)
                 container->line.end = container->x + container->width;
                 container->line.otherCood = container->y + container->height * container->first->ratioOfParent;
                 
-                __SUIResizeWindow(container->first, TOP);
-                __SUIResizeWindow(container->second, BOTTOM);
+                __SUIResizeWindow(environment, container->first, TOP);
+                __SUIResizeWindow(environment, container->second, BOTTOM);
             }
             else if (container->split == VERTICAL)
             {
@@ -855,8 +850,8 @@ void __SUIResizeWindow(SUIContainer* container, SUIChildDirection direction)
                 
                 container->line.otherCood = container->x + container->width * container->first->ratioOfParent;
                 
-                __SUIResizeWindow(container->first, LEFT);
-                __SUIResizeWindow(container->second, RIGHT);
+                __SUIResizeWindow(environment, container->first, LEFT);
+                __SUIResizeWindow(environment, container->second, RIGHT);
             }
         }
         break;
@@ -892,8 +887,8 @@ void __SUIResizeWindow(SUIContainer* container, SUIChildDirection direction)
                 container->line.end = container->x + container->width;
                 container->line.otherCood = container->y + container->height * container->first->ratioOfParent;
                 
-                __SUIResizeWindow(container->first, TOP);
-                __SUIResizeWindow(container->second, BOTTOM);
+                __SUIResizeWindow(environment, container->first, TOP);
+                __SUIResizeWindow(environment, container->second, BOTTOM);
             }
             else if (container->split == VERTICAL)
             {
@@ -902,12 +897,40 @@ void __SUIResizeWindow(SUIContainer* container, SUIChildDirection direction)
                 
                 container->line.otherCood = container->x + container->width * container->first->ratioOfParent;
                 
-                __SUIResizeWindow(container->first, LEFT);
-                __SUIResizeWindow(container->second, RIGHT);
+                __SUIResizeWindow(environment, container->first, LEFT);
+                __SUIResizeWindow(environment, container->second, RIGHT);
             }
         }
         break;
     }
+    
+    
+    if (container->element != NULL)
+    {
+        int32 oldWidth = container->element->buffer.width;
+        int32 oldHeight = container->element->buffer.height;
+        
+        int32 newWidth = (int32) (container->width * environment->fullUISpace.width);
+        int32 newHeight = (int32) (container->height * environment->fullUISpace.height);
+        
+        container->element->buffer.width = newWidth;
+        container->element->buffer.height = newHeight;
+        
+        if (newWidth * newHeight != oldWidth * oldHeight)
+        {
+            free(container->element->buffer.buffer);
+            container->element->buffer.buffer = NULL;
+            
+            container->element->buffer.buffer = malloc(newHeight * newWidth * 4);
+            
+            container->element->dirty = 1;
+            
+        }
+        
+    }
+    
+    
+    
 }
 
 void __SUIMoveSeperatingLine(SUIEnvironment* environment, SUIContainer* container, int32 pixels)
@@ -943,27 +966,27 @@ void __SUIMoveSeperatingLine(SUIEnvironment* environment, SUIContainer* containe
         {
             first->line.otherCood += toMove * first->first->ratioOfParent;
             
-            __SUIResizeWindow(first->first, LEFT);
-            __SUIResizeWindow(first->second, RIGHT);
+            __SUIResizeWindow(environment, first->first, LEFT);
+            __SUIResizeWindow(environment, first->second, RIGHT);
         }
         else if (first->split == HORIZONTAL)
         {
             first->line.end += toMove;
-            __SUIResizeWindow(first->first, TOP);
-            __SUIResizeWindow(first->second, BOTTOM);
+            __SUIResizeWindow(environment, first->first, TOP);
+            __SUIResizeWindow(environment, first->second, BOTTOM);
         }
         
         if (second->split == VERTICAL)
         {
             second->line.otherCood += toMove * second->second->ratioOfParent;
-            __SUIResizeWindow(second->first, LEFT);
-            __SUIResizeWindow(second->second, RIGHT);
+            __SUIResizeWindow(environment, second->first, LEFT);
+            __SUIResizeWindow(environment, second->second, RIGHT);
         }
         else if (second->split == HORIZONTAL)
         {
             second->line.start += toMove;
-            __SUIResizeWindow(second->first, TOP);
-            __SUIResizeWindow(second->second, BOTTOM);
+            __SUIResizeWindow(environment, second->first, TOP);
+            __SUIResizeWindow(environment, second->second, BOTTOM);
         }
         
         
@@ -998,39 +1021,137 @@ void __SUIMoveSeperatingLine(SUIEnvironment* environment, SUIContainer* containe
         {
             first->line.end += toMove;
             
-            __SUIResizeWindow(first->first, LEFT);
-            __SUIResizeWindow(first->second, RIGHT);
+            __SUIResizeWindow(environment, first->first, LEFT);
+            __SUIResizeWindow(environment, first->second, RIGHT);
         }
         else if (first->split == HORIZONTAL)
         {
             first->line.otherCood += toMove * first->first->ratioOfParent;
             
-            __SUIResizeWindow(first->first, TOP);
-            __SUIResizeWindow(first->second, BOTTOM);
+            __SUIResizeWindow(environment, first->first, TOP);
+            __SUIResizeWindow(environment, first->second, BOTTOM);
         }
         
         if (second->split == VERTICAL)
         {
             second->line.start += toMove;
             
-            __SUIResizeWindow(second->first, LEFT);
-            __SUIResizeWindow(second->second, RIGHT);
+            __SUIResizeWindow(environment, second->first, LEFT);
+            __SUIResizeWindow(environment, second->second, RIGHT);
         }
         else if (second->split == HORIZONTAL)
         {
             second->line.otherCood += toMove * second->second->ratioOfParent;
             
-            __SUIResizeWindow(second->first, TOP);
-            __SUIResizeWindow(second->second, BOTTOM);
+            __SUIResizeWindow(environment, second->first, TOP);
+            __SUIResizeWindow(environment, second->second, BOTTOM);
         }
         
     }
+    
+    SUIContainer* first = container->first;
+    SUIContainer* second = container->second;
+    
+    if (first->element != NULL)
+    {
+        int32 oldWidth = first->element->buffer.width;
+        int32 oldHeight = first->element->buffer.height;
+        
+        int32 newWidth = (int32) (first->width * environment->fullUISpace.width);
+        int32 newHeight = (int32) (first->height * environment->fullUISpace.height);
+        
+        first->element->buffer.width = newWidth;
+        first->element->buffer.height = newHeight;
+        
+        if (newWidth * newHeight != oldWidth * oldHeight)
+        {
+            free(first->element->buffer.buffer);
+            first->element->buffer.buffer = NULL;
+            
+            first->element->buffer.buffer = malloc(newHeight * newWidth * 4);
+            
+            first->element->buffer.width = newWidth;
+            first->element->buffer.height = newHeight;
+            
+            first->element->dirty = 1;
+            
+        }
+        
+    }
+    
+    if (second->element != NULL)
+    {
+        int32 oldWidth = second->element->buffer.width;
+        int32 oldHeight = second->element->buffer.height;
+        
+        int32 newWidth = (int32) (second->width * environment->fullUISpace.width);
+        int32 newHeight = (int32) (second->height * environment->fullUISpace.height);
+        
+        second->element->buffer.width = newWidth;
+        second->element->buffer.height = newHeight;
+        
+        if (newWidth * newHeight != oldWidth * oldHeight)
+        {
+            free(second->element->buffer.buffer);
+            second->element->buffer.buffer = NULL;
+            
+            second->element->buffer.buffer = malloc(newHeight * newWidth * 4);
+            
+            second->element->buffer.width = newWidth;
+            second->element->buffer.height = newHeight;
+            
+            second->element->dirty = 1;
+        }
+        
+    }
+    
+}
+
+void __SUIModifyAllBuffer(SUIEnvironment* environment, SUIContainer* container)
+{
+    if (container == NULL) 
+    {
+        return;
+    }
+    
+    if (container->element != NULL)
+    {
+        free(container->element->buffer.buffer);
+        container->element->buffer.buffer = NULL;
+        
+        int newWidth = (int32) (environment->fullUISpace.width * container->width);
+        int newHeight = (int32) (environment->fullUISpace.height * container->height);
+        
+        container->element->buffer.buffer = malloc(newWidth * newHeight * 4);
+        
+        container->element->buffer.width = newWidth;
+        container->element->buffer.height = newHeight;
+        
+        container->element->dirty = 1;
+    }
+    
+    __SUIModifyAllBuffer(environment, container->first);
+    __SUIModifyAllBuffer(environment, container->second);
 }
 
 void SUISetDimension(SUIEnvironment* environment, int32 width, int32 height)
 {
-    environment->fullUISpace.width = width;
-    environment->fullUISpace.height = height;
+    
+    int oldWidth = environment->fullUISpace.width;
+    int oldHeight = environment->fullUISpace.height;
+    
+    int newWidth = environment->fullUISpace.width = width;
+    int newHeight = environment->fullUISpace.height = height;
+    
+    if (newWidth * newHeight == oldWidth * oldHeight)
+    {
+        free(environment->fullUISpace.buffer);
+        environment->fullUISpace.buffer = NULL;
+        environment->fullUISpace.buffer = malloc(newHeight * newWidth * 4);
+    }
+    
+    __SUIModifyAllBuffer(environment, environment->root);
+    
 }
 
 SUIContainer* __SUIGetSeperatingLineHover(SUIEnvironment* environment, SUIContainer* container)
@@ -1096,10 +1217,14 @@ void __SUIDelete(SUIEnvironment* environment, SUIContainer* container)
     
     SUIContainer* gParent = parent->parent;
     
+    SUIContainer* changedContainer = NULL;
+    
     if (gParent == NULL)
     {
         if (parent->first == container)
         {
+            changedContainer = parent->second;
+            
             parent->second->x = environment->root->x;
             parent->second->y = environment->root->y;
             parent->second->width = environment->root->width;
@@ -1111,6 +1236,8 @@ void __SUIDelete(SUIEnvironment* environment, SUIContainer* container)
         }
         else if (parent->second == container)
         {
+            changedContainer = parent->first;
+            
             parent->first->x = environment->root->x;
             parent->first->y = environment->root->y;
             parent->first->width = environment->root->width;
@@ -1127,8 +1254,8 @@ void __SUIDelete(SUIEnvironment* environment, SUIContainer* container)
             environment->root->line.end = environment->root->x + environment->root->width;
             environment->root->line.otherCood = environment->root->y + environment->root->height * environment->root->first->ratioOfParent;
             
-            __SUIResizeWindow(environment->root->first, TOP);
-            __SUIResizeWindow(environment->root->second, BOTTOM);
+            __SUIResizeWindow(environment, environment->root->first, TOP);
+            __SUIResizeWindow(environment, environment->root->second, BOTTOM);
         }
         else if (environment->root->split == VERTICAL)
         {
@@ -1136,21 +1263,20 @@ void __SUIDelete(SUIEnvironment* environment, SUIContainer* container)
             environment->root->line.end = environment->root->y + environment->root->height;
             environment->root->line.otherCood = environment->root->x + environment->root->width * environment->root->first->ratioOfParent;
             
-            __SUIResizeWindow(environment->root->first, LEFT);
-            __SUIResizeWindow(environment->root->second, RIGHT);
+            __SUIResizeWindow(environment, environment->root->first, LEFT);
+            __SUIResizeWindow(environment, environment->root->second, RIGHT);
         }
         
-        
-        
-        return;
     }
     
-    if (gParent->first == parent)
+    else if (gParent->first == parent)
     {
         
         
         if (parent->first == container)
         {
+            changedContainer = parent->second;
+            
             parent->second->x = gParent->first->x;
             parent->second->y = gParent->first->y;
             parent->second->width = gParent->first->width;
@@ -1162,6 +1288,8 @@ void __SUIDelete(SUIEnvironment* environment, SUIContainer* container)
         }
         else if (parent->second == container)
         {
+            changedContainer = parent->first;
+            
             parent->first->x = gParent->first->x;
             parent->first->y = gParent->first->y;
             parent->first->width = gParent->first->width;
@@ -1178,8 +1306,8 @@ void __SUIDelete(SUIEnvironment* environment, SUIContainer* container)
             gParent->first->line.end = gParent->first->x + gParent->first->width;
             gParent->first->line.otherCood = gParent->first->y + gParent->first->height * gParent->first->first->ratioOfParent;
             
-            __SUIResizeWindow(gParent->first->first, TOP);
-            __SUIResizeWindow(gParent->first->second, BOTTOM);
+            __SUIResizeWindow(environment, gParent->first->first, TOP);
+            __SUIResizeWindow(environment, gParent->first->second, BOTTOM);
         }
         else if (gParent->first->split == VERTICAL)
         {
@@ -1187,8 +1315,8 @@ void __SUIDelete(SUIEnvironment* environment, SUIContainer* container)
             gParent->first->line.end = gParent->first->y + gParent->first->height;
             gParent->first->line.otherCood = gParent->first->x + gParent->first->width * gParent->first->first->ratioOfParent;
             
-            __SUIResizeWindow(gParent->first->first, LEFT);
-            __SUIResizeWindow(gParent->first->second, RIGHT);
+            __SUIResizeWindow(environment, gParent->first->first, LEFT);
+            __SUIResizeWindow(environment, gParent->first->second, RIGHT);
         }
         
         
@@ -1198,6 +1326,8 @@ void __SUIDelete(SUIEnvironment* environment, SUIContainer* container)
         
         if (parent->first == container)
         {
+            changedContainer = parent->second;
+            
             parent->second->x = gParent->second->x;
             parent->second->y = gParent->second->y;
             parent->second->width = gParent->second->width;
@@ -1209,6 +1339,8 @@ void __SUIDelete(SUIEnvironment* environment, SUIContainer* container)
         }
         else if (parent->second == container)
         {
+            changedContainer = parent->first;
+            
             parent->first->x = gParent->second->x;
             parent->first->y = gParent->second->y;
             parent->first->width = gParent->second->width;
@@ -1225,8 +1357,8 @@ void __SUIDelete(SUIEnvironment* environment, SUIContainer* container)
             gParent->second->line.end = gParent->second->x + gParent->second->width;
             gParent->second->line.otherCood = gParent->second->y + gParent->second->height * gParent->second->first->ratioOfParent;
             
-            __SUIResizeWindow(gParent->second->first, TOP);
-            __SUIResizeWindow(gParent->second->second, BOTTOM);
+            __SUIResizeWindow(environment, gParent->second->first, TOP);
+            __SUIResizeWindow(environment, gParent->second->second, BOTTOM);
         }
         else if (gParent->second->split == VERTICAL)
         {
@@ -1234,13 +1366,73 @@ void __SUIDelete(SUIEnvironment* environment, SUIContainer* container)
             gParent->second->line.end = gParent->second->y + gParent->second->height;
             gParent->second->line.otherCood = gParent->second->x + gParent->second->width * gParent->second->first->ratioOfParent;
             
-            __SUIResizeWindow(gParent->second->first, LEFT);
-            __SUIResizeWindow(gParent->second->second, RIGHT);
+            __SUIResizeWindow(environment, gParent->second->first, LEFT);
+            __SUIResizeWindow(environment, gParent->second->second, RIGHT);
         }
         
     }
+    
+    if (changedContainer != NULL)
+    {
+        if (changedContainer->element != NULL)
+        {
+            free(changedContainer->element->buffer.buffer);
+            
+            changedContainer->element->buffer.buffer = NULL;
+            
+            int newWidth = (int32) (changedContainer->width * environment->fullUISpace.width);
+            int newHeight = (int32) (changedContainer->height * environment->fullUISpace.height);
+            
+            changedContainer->element->buffer.buffer = malloc(newHeight * newWidth * 4);
+            changedContainer->element->buffer.width = newWidth;
+            changedContainer->element->buffer.height = newHeight;
+            
+            changedContainer->element->dirty = 1;
+        }
+    }
+    
 }
 
+
+
+SUIContainer* __SUIGetHoverWindow(SUIEnvironment* environment, SUIContainer* container)
+{
+    int width = environment->fullUISpace.width;
+    int height = environment->fullUISpace.height;
+    
+    if (container->split == NONE)
+    {
+        int32 x1 = (int32) (container->x * width);
+        int32 x2 = (int32) (container->x * width + container->width * width);
+        
+        int32 y1 = (int32) (container->y * height);
+        int32 y2 = (int32) (container->y * height + container->height * height);
+        
+        
+        
+        if (environment->xPos >= x1 && environment->xPos <= x2 && environment->yPos >= y1 && environment->yPos <= y2)
+        {
+            return container;
+        }
+        else
+        {
+            return NULL;
+        }
+    }
+    
+    SUIContainer* subWindow = __SUIGetHoverWindow(environment, container->first);
+    
+    if (subWindow == NULL)
+    {
+        subWindow = __SUIGetHoverWindow(environment, container->second);
+    }
+    
+    return subWindow;
+    
+}
+
+
+global SUIContainer* currentContainerHover;
 
 void SUIUpdate(SUIEnvironment* environment)
 {
@@ -1258,6 +1450,8 @@ void SUIUpdate(SUIEnvironment* environment)
     int width = environment->fullUISpace.width;
     
     int height = environment->fullUISpace.height;
+    
+    currentContainerHover = NULL;
     
     if (clicked == 1 && pClicked == 0) // just clicked
     {
@@ -1325,6 +1519,10 @@ void SUIUpdate(SUIEnvironment* environment)
             environment->cursor = glfwCreateStandardCursor(GLFW_VRESIZE_CURSOR);
         }
     }
+    else 
+    {
+        currentContainerHover = __SUIGetHoverWindow(environment, environment->root);
+    }
     
     glfwSetCursor(glwindow, environment->cursor);
     
@@ -1336,13 +1534,8 @@ void __SUIFillBuffer(SUIEnvironment* environment, SUIContainer* container)
     int width = environment->fullUISpace.width;
     int height = environment->fullUISpace.height;
     
-    if (container->split == NONE)
+    if (container->split == NONE && container->element != NULL)
     {
-        
-        // TODO(Suhaib): Writing a terrible inefficient program make sure to change it
-        
-        int32 actualX = (int32) (container->x * width);
-        int32 actualY = (int32) (container->y * height);
         
         int32 actualWidth = (int32) (container->width * width);
         int32 actualHeight = (int32) (container->height * height);
@@ -1353,19 +1546,6 @@ void __SUIFillBuffer(SUIEnvironment* environment, SUIContainer* container)
         
         float32 x2 = S2GL_W(container->x + container->width);
         float32 y2 = S2GL_H(container->y + container->height);
-        
-        container->element->buffer.width = actualWidth;
-        container->element->buffer.height = actualHeight;
-        
-        if (container->element->buffer.buffer != NULL)
-        {
-            free(container->element->buffer.buffer);
-            container->element->buffer.buffer = NULL;
-        }
-        
-        container->element->buffer.width = actualWidth;
-        container->element->buffer.height = actualHeight;
-        container->element->buffer.buffer = malloc(actualHeight * actualWidth * 4);
         
         container->element->SUIRenderCallback(container->element);
         
@@ -1379,11 +1559,16 @@ void __SUIFillBuffer(SUIEnvironment* environment, SUIContainer* container)
         environment->elementVertices[environment->elementArraySize++] = (SUIElementVertex) {x2, y2, 1, 1, tid};
         environment->elementVertices[environment->elementArraySize++] = (SUIElementVertex) {x1, y2, 0, 1, tid};
         
-        glActiveTexture(GL_TEXTURE0 + tid);
-        glBindTexture(GL_TEXTURE_2D, container->element->texture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, actualWidth, actualHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, container->element->buffer.buffer);
-        glGenerateMipmap(GL_TEXTURE_2D);
         
+        if (container->element->dirty == 1)
+        {
+            glActiveTexture(GL_TEXTURE0 + tid);
+            glBindTexture(GL_TEXTURE_2D, container->element->texture);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, actualWidth, actualHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, container->element->buffer.buffer);
+            glGenerateMipmap(GL_TEXTURE_2D);
+            
+            container->element->dirty = 0;
+        }
         
         return;
     }
@@ -1395,24 +1580,6 @@ void __SUIFillBuffer(SUIEnvironment* environment, SUIContainer* container)
 
 void SUIRender(SUIEnvironment* environment)
 {
-    int width = environment->fullUISpace.width;
-    int height = environment->fullUISpace.height;
-    
-    void* buffer = environment->fullUISpace.buffer;
-    
-    // TODO(Suhaib): Again writing terrible code here please fix this
-    
-    if (buffer != NULL)
-    {
-        free(buffer);
-        environment->fullUISpace.buffer = NULL;
-    }
-    
-    environment->fullUISpace.width = width;
-    environment->fullUISpace.height = height;
-    environment->fullUISpace.buffer = malloc(height * width * 4);
-    
-    
     environment->elementArraySize = 0;
     __SUIFillBuffer(environment, environment->root);
     
@@ -1426,10 +1593,6 @@ void SUIRender(SUIEnvironment* environment)
     
     glDrawArrays(GL_TRIANGLES, 0, environment->elementArraySize);
     
-    
-    //glDrawPixels(width, height, GL_RGBA, GL_UNSIGNED_BYTE, environment->fullUISpace.buffer);
-    
-    //UIFillWithStuff();
     environment->lineArraySize = 0;
     __SUIDrawSeperatingLines(environment, environment->root);
     
@@ -1453,9 +1616,6 @@ void SUIRender(SUIEnvironment* environment)
             environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x2, y2, 1.0f, 1.0f, 1.0f, 1.0f};
             environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x1, y2, 1.0f, 1.0f, 1.0f, 1.0f};
             
-            
-            //glVertex3f(S2GL_W(line.otherCood), S2GL_H(line.start), 0.0f);
-            //glVertex3f(S2GL_W(line.otherCood), S2GL_H(line.end), 0.0f);
         }
         else if (environment->currentContainerHeld->split == HORIZONTAL)
         {
@@ -1476,24 +1636,30 @@ void SUIRender(SUIEnvironment* environment)
             environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x2, y2, 1.0f, 1.0f, 1.0f, 1.0f};
             environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x1, y2, 1.0f, 1.0f, 1.0f, 1.0f};
             
-            //glVertex3f(S2GL_W(line.start), S2GL_H(line.otherCood), 0.0f);
-            //glVertex3f(S2GL_W(line.end), S2GL_H(line.otherCood), 0.0f);
         }
-        /*
-        glLineWidth(environment->phantomLine.width); 
-        glColor3f(0.0, 0.0, 0.0);
-        glBegin(GL_LINES);
-        if (environment->currentContainerHeld->split == VERTICAL)
-        {
-        glVertex3f(S2GL_W(environment->phantomLine.otherCood), S2GL_H(environment->phantomLine.start), 0.0f);
-        glVertex3f(S2GL_W(environment->phantomLine.otherCood), S2GL_H(environment->phantomLine.end), 0.0f);
-        }
-        else if (environment->currentContainerHeld->split == HORIZONTAL)
-        {
-        glVertex3f(S2GL_W(environment->phantomLine.start), S2GL_H(environment->phantomLine.otherCood), 0.0f);
-        glVertex3f(S2GL_W(environment->phantomLine.end), S2GL_H(environment->phantomLine.otherCood), 0.0f);
-        }
-        glEnd();*/
+        
+    }
+    
+    if (currentContainerHover != NULL)
+    {
+        float middleX = S2GL_W(currentContainerHover->x + currentContainerHover->width / 2.0f);
+        float middleY = S2GL_H(currentContainerHover->y + currentContainerHover->height / 2.0f);
+        
+        float halfWidth = 0.02f;
+        
+        float x1 = middleX - halfWidth;
+        float x2 = middleX + halfWidth;
+        float y1 = middleY - halfWidth;
+        float y2 = middleY + halfWidth;
+        
+        environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x1, y1, 0.0f, 0.0f, 0.0f, 1.0f};
+        environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x2, y1, 0.0f, 0.0f, 0.0f, 1.0f};
+        environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x2, y2, 0.0f, 0.0f, 0.0f, 1.0f};
+        
+        environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x1, y1, 0.0f, 0.0f, 0.0f, 1.0f};
+        environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x2, y2, 0.0f, 0.0f, 0.0f, 1.0f};
+        environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x1, y2, 0.0f, 0.0f, 0.0f, 1.0f};
+        
     }
     
     glUseProgram(environment->lineShader);
@@ -1503,50 +1669,15 @@ void SUIRender(SUIEnvironment* environment)
     
     glBufferData(GL_ARRAY_BUFFER, sizeof(SUILineVertex) * environment->lineArraySize, environment->lineVertices, GL_DYNAMIC_DRAW);
     
-    
     glDrawArrays(GL_TRIANGLES, 0, environment->lineArraySize);
     
 }
 
-SUIContainer* __SUIGetHoverWindow(SUIEnvironment* environment, SUIContainer* container)
-{
-    int width = environment->fullUISpace.width;
-    int height = environment->fullUISpace.height;
-    
-    if (container->split == NONE)
-    {
-        int32 x1 = (int32) (container->x * width);
-        int32 x2 = (int32) (container->x * width + container->width * width);
-        
-        int32 y1 = (int32) (container->y * height);
-        int32 y2 = (int32) (container->y * height + container->height * height);
-        
-        
-        
-        if (environment->xPos >= x1 && environment->xPos <= x2 && environment->yPos >= y1 && environment->yPos <= y2)
-        {
-            return container;
-        }
-        else
-        {
-            return NULL;
-        }
-    }
-    
-    SUIContainer* subWindow = __SUIGetHoverWindow(environment, container->first);
-    
-    if (subWindow == NULL)
-    {
-        subWindow = __SUIGetHoverWindow(environment, container->second);
-    }
-    
-    return subWindow;
-    
-}
 
-
+/*
 // TODO(Suhaib): Remove this mostly we will do stuff like these with a callbACK
 SUIContainer* SUIGetHoverWindow(SUIEnvironment* environment)
 {
     return __SUIGetHoverWindow(environment, environment->root);
 }
+*/

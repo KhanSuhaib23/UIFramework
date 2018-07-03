@@ -1,6 +1,4 @@
-// TODO(Suhaib): Render using textures instead of copying again to buffer and rendering that buffer, perf based so late in the game
-
-// TODO(Suhaib): Ingotduce dirty and clean rectangle
+// TODO(Suhaib): Maybe move the buffer to the container
 
 #define GLEW_STATIC
 
@@ -46,17 +44,17 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 {
     if (key == GLFW_KEY_V && action == GLFW_PRESS)
     {
-        __SUISubDivide(SUIGetHoverWindow(environment), VERTICAL);
+        //__SUISubDivide(SUIGetHoverWindow(environment), VERTICAL);
     }
     
     if (key == GLFW_KEY_H && action == GLFW_PRESS)
     {
-        __SUISubDivide(SUIGetHoverWindow(environment), HORIZONTAL);
+        //__SUISubDivide(SUIGetHoverWindow(environment), HORIZONTAL);
     }
     
     if (key == GLFW_KEY_D && action == GLFW_PRESS)
     {
-        __SUIDelete(environment, SUIGetHoverWindow(environment));
+        //__SUIDelete(environment, SUIGetHoverWindow(environment));
     }
     
 }
@@ -152,6 +150,8 @@ int main()
         return -1;
     }
     
+    //glfwSwapInterval(0);
+    
     glfwSetFramebufferSizeCallback(glwindow, framebuffer_size_callback);
     glfwSetMouseButtonCallback(glwindow, mouse_button_callback);
     glfwSetKeyCallback(glwindow, key_callback);
@@ -182,15 +182,15 @@ int main()
     SUIContainer* temp;
     
     SUIOpen(environment, &bottomUIElement);
-    SUIDock(completeUI, &bottomUIElement, DOCK_BOTTOM, &hero, &temp); 
+    SUIDock(environment, completeUI, &bottomUIElement, DOCK_BOTTOM, &hero, &temp); 
     
     SUIContainer* rightElement;
     
     SUIOpen(environment, &leftUIElement);
-    SUIDock(hero, &leftUIElement, DOCK_LEFT, &temp, &rightElement);
+    SUIDock(environment, hero, &leftUIElement, DOCK_LEFT, &temp, &rightElement);
     
     SUIOpen(environment, &rightUIElement);
-    SUIDock(rightElement, &rightUIElement, DOCK_COMPLETE, &temp, &temp);
+    SUIDock(environment, rightElement, &rightUIElement, DOCK_COMPLETE, &temp, &temp);
     
     
     SUISetDimension(environment, width, height);
