@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <malloc.h>
 
+
 #include "StandardDefinitions.h"
 
 #define LINE_WIDTH 5
@@ -46,6 +47,21 @@ typedef struct SUIBuffer
 
 typedef struct SUIContainer SUIContainer;
 
+typedef struct SUIElementVertex
+{
+    float x, y;
+    float u, v;
+    uint32 texID;
+    
+} SUIElementVertex;
+
+typedef struct SUILineVertex
+{
+    float x, y;
+    float r, g, b, a;
+    
+} SUILineVertex;
+
 struct SUIContainer
 {
     float32 x, y;
@@ -58,16 +74,21 @@ struct SUIContainer
     SUIContainer* first;
     SUIContainer* second;
     SUIContainer* parent;
+    
+    
 };
 
 typedef void (SUIRenderCallbackFunction(SUIElement*));
+
 
 // TODO(Suhaib): Rename this 
 struct SUIElement
 {
     SUIBuffer buffer;
     SUIRenderCallbackFunction* SUIRenderCallback;
-    
+    uint32 texture;
+    uint32 texID;
+    int32 onDisplay;
 };
 
 
@@ -80,9 +101,19 @@ typedef struct SUIEnvironment
     SUIBuffer fullUISpace;
     SUIContainer* currentContainerHeld;
     GLFWcursor* cursor;
+    int32 filledTextureSlot[32];
+    GLuint elementShader; // TODO(Suhaib): see if uint32 works instead of GLuint
+    GLuint lineShader;
+    uint32 elementVAO;
+    uint32 elementVBO;
+    uint32 lineVAO;
+    uint32 lineVBO;
+    SUIElementVertex elementVertices[100];
+    SUILineVertex lineVertices[100];
+    int32 elementArraySize;
+    int32 lineArraySize;
     
 } SUIEnvironment;
-
 
 internal float32 S2GL_W(float32 cood)
 {
@@ -119,28 +150,222 @@ internal void SUIRenderCallbackStub(SUIElement* element)
     
     for (int32 i = 0; i < width * height; i++)
     {
-        /*if (colorIndex == 0)
-            buffer[i] = 0xff00ff00;
-        else if (colorIndex == 1)
-            buffer[i] = 0xffff0000;
-        else if (colorIndex == 2)
-            buffer[i] = 0xff00ffff;
-        else if (colorIndex == 3)
-            buffer[i] = 0xff000000; */
-        
         buffer[i] = 0xff000000;
     }
     
-    //colorIndex = (colorIndex + 1) % 4;
     
 }
 
+SUIElement* SUIGetValidUIElement()
+{
+    SUIElement* element = malloc(sizeof(SUIElement));
+    
+    *element = (SUIElement) {0};
+    
+    glGenTextures(1, &element->texture);
+    
+    glBindTexture(GL_TEXTURE_2D, element->texture);
+    
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    
+    return element;
+}
 
 SUIEnvironment* SUIInit()
 {
     SUIEnvironment* environment = malloc(sizeof(SUIEnvironment));
-    
     *environment = (SUIEnvironment) {0};
+    
+    
+    GLint result;
+    
+    GLuint program = glCreateProgram();
+    GLuint vertexShaderID = glCreateShader(GL_VERTEX_SHADER);
+    GLuint fragmentShaderID = glCreateShader(GL_FRAGMENT_SHADER);
+    
+    const GLchar* vertexSource = 
+        "#version 330 core\n\
+\n\
+layout (location = 0) in vec2 position;\n\
+layout (location = 1) in vec2 texCood;\n\
+layout (location = 2) in float texID;\n\
+\n\
+out DATA\n\
+{\n\
+vec2 texCood;\n\
+float texID;\n\
+} vs_out;\n\
+\n\
+void main()\n\
+{\n\
+gl_Position = vec4(position, 1.0f, 1.0f);\n\
+vs_out.texCood = texCood;\n\
+vs_out.texID = texID;\n\
+}";
+    
+    glShaderSource(vertexShaderID, 1, &vertexSource, NULL);
+    glCompileShader(vertexShaderID);
+    glGetShaderiv(vertexShaderID, GL_COMPILE_STATUS, &result);
+    
+    if (!result)
+    {
+        puts(vertexSource);
+        printf("Cannot Compile Vertex Shader\n");
+    }
+    
+    const GLchar* fragmentSource =
+        "#version 330 core\n\
+\n\
+out vec4 color;\n\
+\n\
+in DATA\n\
+{\n\
+vec2 texCood;\n\
+float texID;\n\
+} fs_in;\n\
+\n\
+uniform sampler2D textures[32];\n\
+\n\
+void main()\n\
+{\n\
+int tid = int (fs_in.texID);\n\
+color = texture(textures[tid], fs_in.texCood);\n\
+}";
+    
+    glShaderSource(fragmentShaderID, 1, &fragmentSource, NULL);
+    glCompileShader(fragmentShaderID);
+    glGetShaderiv(fragmentShaderID, GL_COMPILE_STATUS, &result);
+    
+    if (!result)
+    {
+        puts(fragmentSource);
+        printf("Cannot Compile Fragment Shader\n");
+    }
+    
+    glAttachShader(program, vertexShaderID);
+    glAttachShader(program, fragmentShaderID);
+    
+    glLinkProgram(program);
+    glValidateProgram(program);
+    
+    glDeleteShader(vertexShaderID);
+    glDeleteShader(fragmentShaderID);
+    
+    environment->elementShader = program;
+    
+    glUseProgram(environment->elementShader);
+    
+    int shaderTexArr[32] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+        10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+        20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+        30, 31 };
+    
+    glUniform1iv(glGetUniformLocation(environment->elementShader, "textures"), 32, shaderTexArr);
+    
+    glUseProgram(0);
+    
+    
+    
+    program = glCreateProgram();
+    vertexShaderID = glCreateShader(GL_VERTEX_SHADER);
+    fragmentShaderID = glCreateShader(GL_FRAGMENT_SHADER);
+    
+    vertexSource = 
+        "#version 330 core\n\
+\n\
+layout (location = 0) in vec2 position;\n\
+layout (location = 1) in vec4 color;\n\
+\n\
+out vec4 vert_color;\n\
+\n\
+void main()\n\
+{\n\
+gl_Position = vec4(position, 1.0f, 1.0f);\n\
+vert_color = color;\n\
+}";
+    
+    glShaderSource(vertexShaderID, 1, &vertexSource, NULL);
+    glCompileShader(vertexShaderID);
+    glGetShaderiv(vertexShaderID, GL_COMPILE_STATUS, &result);
+    
+    if (!result)
+    {
+        puts(vertexSource);
+        printf("Cannot Compile Line Vertex Shader\n");
+    }
+    
+    fragmentSource =
+        "#version 330 core\n\
+\n\
+out vec4 color;\n\
+\n\
+in vec4 vert_color;\n\
+\n\
+void main()\n\
+{\n\
+color = vert_color;\n\
+}";
+    
+    glShaderSource(fragmentShaderID, 1, &fragmentSource, NULL);
+    glCompileShader(fragmentShaderID);
+    glGetShaderiv(fragmentShaderID, GL_COMPILE_STATUS, &result);
+    
+    if (!result)
+    {
+        puts(fragmentSource);
+        printf("Cannot Compile Line Fragment Shader\n");
+    }
+    
+    glAttachShader(program, vertexShaderID);
+    glAttachShader(program, fragmentShaderID);
+    
+    glLinkProgram(program);
+    glValidateProgram(program);
+    
+    glDeleteShader(vertexShaderID);
+    glDeleteShader(fragmentShaderID);
+    
+    environment->lineShader = program;
+    
+    
+    glGenVertexArrays(1, &environment->elementVAO);
+    glGenBuffers(1, &environment->elementVBO);
+    
+    
+    glBindVertexArray(environment->elementVAO);
+    
+    glBindBuffer(GL_ARRAY_BUFFER, environment->elementVBO);
+    
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float) + 1 * sizeof(uint32), (void*) 0);
+    glEnableVertexAttribArray(0);
+    
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float) + 1 * sizeof(uint32), (void*) (2 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+    
+    glVertexAttribPointer(2, 1, GL_UNSIGNED_INT, GL_FALSE, 4 * sizeof(float) + 1 * sizeof(uint32), (void*) (4 * sizeof(float)));
+    glEnableVertexAttribArray(2);
+    
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+    
+    
+    glGenVertexArrays(1, &environment->lineVAO);
+    glGenBuffers(1, &environment->lineVBO);
+    
+    
+    glBindVertexArray(environment->lineVAO);
+    
+    glBindBuffer(GL_ARRAY_BUFFER, environment->lineVBO);
+    
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*) 0);
+    glEnableVertexAttribArray(0);
+    
+    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*) (2 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+    
     
     environment->root = malloc(sizeof(SUIContainer));
     
@@ -321,6 +546,7 @@ internal void __SUISubDivide(SUIContainer* container, SUIAlignment align)
     
 }
 
+
 typedef enum SUIDockType
 {
     DOCK_COMPLETE,
@@ -335,6 +561,7 @@ SUIContainer* SUIGetRoot(SUIEnvironment* environment)
 {
     return environment->root;
 }
+
 
 void SUIDock(SUIContainer* container, SUIElement* element, SUIDockType docType, SUIContainer** first, SUIContainer** second)
 {
@@ -386,6 +613,34 @@ void SUIDock(SUIContainer* container, SUIElement* element, SUIDockType docType, 
     }
 }
 
+// TODO(Suhaib): Complete this
+void SUIUndock()
+{
+    
+}
+
+
+void SUIOpen(SUIEnvironment* environment, SUIElement* element)
+{
+    for (int i = 0; i < 32; i++)
+    {
+        if (environment->filledTextureSlot[i] == 0)
+        {
+            element->texID = i;
+            environment->filledTextureSlot[i] = 1;
+            return;
+        }
+    }
+}
+
+void SUIClose(SUIEnvironment* environment, SUIElement* element)
+{
+    // TODO(Suhaib): SUIUndock is incomplete
+    SUIUndock();
+    environment->filledTextureSlot[element->texID] = 0;
+}
+
+
 void SUISetMouseState(SUIEnvironment* environment, int32 xpos, int32 ypos, int32 clicked)
 {
     environment->pXPos = environment->xPos;
@@ -398,7 +653,7 @@ void SUISetMouseState(SUIEnvironment* environment, int32 xpos, int32 ypos, int32
 }
 
 
-void __SUIDrawSeperatingLines(SUIContainer* container)
+void __SUIDrawSeperatingLines(SUIEnvironment* environment, SUIContainer* container)
 {
     
     if (container->split == NONE) return;
@@ -406,23 +661,57 @@ void __SUIDrawSeperatingLines(SUIContainer* container)
     
     SUIDividingLine line = container->line;
     
-    glLineWidth(line.width); 
-    glColor3f(1.0, 0.0, 0.0);
-    glBegin(GL_LINES);
+    //glLineWidth(line.width); 
+    //glColor3f(1.0, 1.0, 1.0);
+    //glBegin(GL_LINES);
     if (container->split == VERTICAL)
     {
-        glVertex3f(S2GL_W(line.otherCood), S2GL_H(line.start), 0.0f);
-        glVertex3f(S2GL_W(line.otherCood), S2GL_H(line.end), 0.0f);
+        float actualWidth = line.width / environment->fullUISpace.width;
+        
+        float x1 = S2GL_W(line.otherCood);
+        float x2 = S2GL_W(line.otherCood + actualWidth);
+        
+        float y1 = S2GL_H(line.start);
+        float y2 = S2GL_H(line.end);
+        
+        environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x1, y1, 1.0f, 0.0f, 0.0f, 1.0f};
+        environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x2, y1, 1.0f, 0.0f, 0.0f, 1.0f};
+        environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x2, y2, 1.0f, 0.0f, 0.0f, 1.0f};
+        
+        environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x1, y1, 1.0f, 0.0f, 0.0f, 1.0f};
+        environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x2, y2, 1.0f, 0.0f, 0.0f, 1.0f};
+        environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x1, y2, 1.0f, 0.0f, 0.0f, 1.0f};
+        
+        
+        //glVertex3f(S2GL_W(line.otherCood), S2GL_H(line.start), 0.0f);
+        //glVertex3f(S2GL_W(line.otherCood), S2GL_H(line.end), 0.0f);
     }
     else if (container->split == HORIZONTAL)
     {
-        glVertex3f(S2GL_W(line.start), S2GL_H(line.otherCood), 0.0f);
-        glVertex3f(S2GL_W(line.end), S2GL_H(line.otherCood), 0.0f);
+        
+        float actualWidth = line.width / environment->fullUISpace.height;
+        
+        float y1 = S2GL_H(line.otherCood);
+        float y2 = S2GL_H(line.otherCood + actualWidth);
+        
+        float x1 = S2GL_W(line.start);
+        float x2 = S2GL_W(line.end);
+        
+        environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x1, y1, 1.0f, 0.0f, 0.0f, 1.0f};
+        environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x2, y1, 1.0f, 0.0f, 0.0f, 1.0f};
+        environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x2, y2, 1.0f, 0.0f, 0.0f, 1.0f};
+        
+        environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x1, y1, 1.0f, 0.0f, 0.0f, 1.0f};
+        environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x2, y2, 1.0f, 0.0f, 0.0f, 1.0f};
+        environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x1, y2, 1.0f, 0.0f, 0.0f, 1.0f};
+        
+        //glVertex3f(S2GL_W(line.start), S2GL_H(line.otherCood), 0.0f);
+        //glVertex3f(S2GL_W(line.end), S2GL_H(line.otherCood), 0.0f);
     }
-    glEnd();
+    //glEnd();
     
-    __SUIDrawSeperatingLines(container->first);
-    __SUIDrawSeperatingLines(container->second);
+    __SUIDrawSeperatingLines(environment, container->first);
+    __SUIDrawSeperatingLines(environment, container->second);
     
 }
 
@@ -795,7 +1084,6 @@ SUIContainer* __SUIGetSeperatingLineHover(SUIEnvironment* environment, SUIContai
 }
 
 
-
 void __SUIDelete(SUIEnvironment* environment, SUIContainer* container)
 {
     
@@ -1059,6 +1347,13 @@ void __SUIFillBuffer(SUIEnvironment* environment, SUIContainer* container)
         int32 actualWidth = (int32) (container->width * width);
         int32 actualHeight = (int32) (container->height * height);
         
+        
+        float32 x1 = S2GL_W(container->x);
+        float32 y1 = S2GL_H(container->y);
+        
+        float32 x2 = S2GL_W(container->x + container->width);
+        float32 y2 = S2GL_H(container->y + container->height);
+        
         container->element->buffer.width = actualWidth;
         container->element->buffer.height = actualHeight;
         
@@ -1066,7 +1361,6 @@ void __SUIFillBuffer(SUIEnvironment* environment, SUIContainer* container)
         {
             free(container->element->buffer.buffer);
             container->element->buffer.buffer = NULL;
-            //free(container->element);
         }
         
         container->element->buffer.width = actualWidth;
@@ -1075,26 +1369,22 @@ void __SUIFillBuffer(SUIEnvironment* environment, SUIContainer* container)
         
         container->element->SUIRenderCallback(container->element);
         
+        uint32 tid = container->element->texID; 
         
-        // NOTE(Suhaib): All this because OpenGL renders from bottom left instead of top left
-        int32 xStart = actualX;
-        int32 yStart = height - actualY - 1;
+        environment->elementVertices[environment->elementArraySize++] = (SUIElementVertex) {x1, y1, 0, 0, tid};
+        environment->elementVertices[environment->elementArraySize++] = (SUIElementVertex) {x2, y1, 1, 0, tid};
+        environment->elementVertices[environment->elementArraySize++] = (SUIElementVertex) {x2, y2, 1, 1, tid};
         
-        int32 xEnd = xStart + actualWidth - 1;
-        int32 yEnd = yStart - actualHeight + 1;
+        environment->elementVertices[environment->elementArraySize++] = (SUIElementVertex) {x1, y1, 0, 0, tid};
+        environment->elementVertices[environment->elementArraySize++] = (SUIElementVertex) {x2, y2, 1, 1, tid};
+        environment->elementVertices[environment->elementArraySize++] = (SUIElementVertex) {x1, y2, 0, 1, tid};
         
-        int32* outBuffer = environment->fullUISpace.buffer;
-        int32* inBuffer = container->element->buffer.buffer;
+        glActiveTexture(GL_TEXTURE0 + tid);
+        glBindTexture(GL_TEXTURE_2D, container->element->texture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, actualWidth, actualHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, container->element->buffer.buffer);
+        glGenerateMipmap(GL_TEXTURE_2D);
         
-        int32 inBufferIndex = 0; 
         
-        for (int32 y = yStart; y >= yEnd; y--)
-        {
-            for (int32 x = xStart; x <= xEnd; x++)
-            {
-                outBuffer[x + y * width] = inBuffer[inBufferIndex++];
-            }
-        }
         return;
     }
     
@@ -1122,31 +1412,99 @@ void SUIRender(SUIEnvironment* environment)
     environment->fullUISpace.height = height;
     environment->fullUISpace.buffer = malloc(height * width * 4);
     
+    
+    environment->elementArraySize = 0;
     __SUIFillBuffer(environment, environment->root);
     
-    glDrawPixels(width, height, GL_RGBA, GL_UNSIGNED_BYTE, environment->fullUISpace.buffer);
+    glUseProgram(environment->elementShader);
+    
+    glBindVertexArray(environment->elementVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, environment->elementVBO);
+    
+    glBufferData(GL_ARRAY_BUFFER, sizeof(SUIElementVertex) * environment->elementArraySize, environment->elementVertices, GL_DYNAMIC_DRAW);
+    
+    
+    glDrawArrays(GL_TRIANGLES, 0, environment->elementArraySize);
+    
+    
+    //glDrawPixels(width, height, GL_RGBA, GL_UNSIGNED_BYTE, environment->fullUISpace.buffer);
     
     //UIFillWithStuff();
-    __SUIDrawSeperatingLines(environment->root);
+    environment->lineArraySize = 0;
+    __SUIDrawSeperatingLines(environment, environment->root);
     
     if (environment->currentContainerHeld != NULL)
     {
-        
-        glLineWidth(environment->phantomLine.width); 
-        glColor3f(1.0, 1.0, 1.0);
-        glBegin(GL_LINES);
         if (environment->currentContainerHeld->split == VERTICAL)
         {
-            glVertex3f(S2GL_W(environment->phantomLine.otherCood), S2GL_H(environment->phantomLine.start), 0.0f);
-            glVertex3f(S2GL_W(environment->phantomLine.otherCood), S2GL_H(environment->phantomLine.end), 0.0f);
+            float actualWidth = environment->phantomLine.width / environment->fullUISpace.width;
+            
+            float x1 = S2GL_W(environment->phantomLine.otherCood);
+            float x2 = S2GL_W(environment->phantomLine.otherCood + actualWidth);
+            
+            float y1 = S2GL_H(environment->phantomLine.start);
+            float y2 = S2GL_H(environment->phantomLine.end);
+            
+            environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x1, y1, 1.0f, 1.0f, 1.0f, 1.0f};
+            environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x2, y1, 1.0f, 1.0f, 1.0f, 1.0f};
+            environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x2, y2, 1.0f, 1.0f, 1.0f, 1.0f};
+            
+            environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x1, y1, 1.0f, 1.0f, 1.0f, 1.0f};
+            environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x2, y2, 1.0f, 1.0f, 1.0f, 1.0f};
+            environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x1, y2, 1.0f, 1.0f, 1.0f, 1.0f};
+            
+            
+            //glVertex3f(S2GL_W(line.otherCood), S2GL_H(line.start), 0.0f);
+            //glVertex3f(S2GL_W(line.otherCood), S2GL_H(line.end), 0.0f);
         }
         else if (environment->currentContainerHeld->split == HORIZONTAL)
         {
-            glVertex3f(S2GL_W(environment->phantomLine.start), S2GL_H(environment->phantomLine.otherCood), 0.0f);
-            glVertex3f(S2GL_W(environment->phantomLine.end), S2GL_H(environment->phantomLine.otherCood), 0.0f);
+            
+            float actualWidth = environment->phantomLine.width / environment->fullUISpace.height;
+            
+            float y1 = S2GL_H(environment->phantomLine.otherCood);
+            float y2 = S2GL_H(environment->phantomLine.otherCood + actualWidth);
+            
+            float x1 = S2GL_W(environment->phantomLine.start);
+            float x2 = S2GL_W(environment->phantomLine.end);
+            
+            environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x1, y1, 1.0f, 1.0f, 1.0f, 1.0f};
+            environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x2, y1, 1.0f, 1.0f, 1.0f, 1.0f};
+            environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x2, y2, 1.0f, 1.0f, 1.0f, 1.0f};
+            
+            environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x1, y1, 1.0f, 1.0f, 1.0f, 1.0f};
+            environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x2, y2, 1.0f, 1.0f, 1.0f, 1.0f};
+            environment->lineVertices[environment->lineArraySize++] = (SUILineVertex) {x1, y2, 1.0f, 1.0f, 1.0f, 1.0f};
+            
+            //glVertex3f(S2GL_W(line.start), S2GL_H(line.otherCood), 0.0f);
+            //glVertex3f(S2GL_W(line.end), S2GL_H(line.otherCood), 0.0f);
         }
-        glEnd();
+        /*
+        glLineWidth(environment->phantomLine.width); 
+        glColor3f(0.0, 0.0, 0.0);
+        glBegin(GL_LINES);
+        if (environment->currentContainerHeld->split == VERTICAL)
+        {
+        glVertex3f(S2GL_W(environment->phantomLine.otherCood), S2GL_H(environment->phantomLine.start), 0.0f);
+        glVertex3f(S2GL_W(environment->phantomLine.otherCood), S2GL_H(environment->phantomLine.end), 0.0f);
+        }
+        else if (environment->currentContainerHeld->split == HORIZONTAL)
+        {
+        glVertex3f(S2GL_W(environment->phantomLine.start), S2GL_H(environment->phantomLine.otherCood), 0.0f);
+        glVertex3f(S2GL_W(environment->phantomLine.end), S2GL_H(environment->phantomLine.otherCood), 0.0f);
+        }
+        glEnd();*/
     }
+    
+    glUseProgram(environment->lineShader);
+    
+    glBindVertexArray(environment->lineVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, environment->lineVBO);
+    
+    glBufferData(GL_ARRAY_BUFFER, sizeof(SUILineVertex) * environment->lineArraySize, environment->lineVertices, GL_DYNAMIC_DRAW);
+    
+    
+    glDrawArrays(GL_TRIANGLES, 0, environment->lineArraySize);
     
 }
 

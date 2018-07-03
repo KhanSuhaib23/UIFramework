@@ -2,8 +2,10 @@
 
 // TODO(Suhaib): Ingotduce dirty and clean rectangle
 
-#include <glfw3.h>
+#define GLEW_STATIC
 
+#include <glew.h>
+#include <glfw3.h>
 GLFWwindow* glwindow;
 
 
@@ -21,6 +23,7 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
     SUISetDimension(environment, width, height);
     //glViewport(0, 0, width, -height);
 }
+
 
 int pressed = 0;
 
@@ -134,6 +137,17 @@ int main()
     glwindow= glfwCreateWindow(WIDTH, HEIGHT, "Hello World", NULL, NULL);
     if (!glwindow)
     {
+        printf("GLFW Problem\n");
+        glfwTerminate();
+        return -1;
+    }
+    
+    glfwMakeContextCurrent(glwindow);
+    
+    
+    if (glewInit() != GLEW_OK)
+    {
+        printf("GLEW Problem\n");
         glfwTerminate();
         return -1;
     }
@@ -148,17 +162,17 @@ int main()
     environment = SUIInit();
     
     /*bottom element*/
-    SUIElement bottomUIElement = (SUIElement) {0};
+    SUIElement bottomUIElement = *SUIGetValidUIElement();//(SUIElement) {0};
     
     bottomUIElement.SUIRenderCallback = BottomSUIRender;
     
     /*Left Side*/
-    SUIElement leftUIElement = (SUIElement) {0};
+    SUIElement leftUIElement = *SUIGetValidUIElement();//(SUIElement) {0};
     
     leftUIElement.SUIRenderCallback = LeftSUIRender;
     
     /*Right Side*/
-    SUIElement rightUIElement = (SUIElement) {0};
+    SUIElement rightUIElement = *SUIGetValidUIElement();//(SUIElement) {0};
     
     rightUIElement.SUIRenderCallback = RightSUIRender;
     
@@ -167,21 +181,19 @@ int main()
     SUIContainer* hero;
     SUIContainer* temp;
     
+    SUIOpen(environment, &bottomUIElement);
     SUIDock(completeUI, &bottomUIElement, DOCK_BOTTOM, &hero, &temp); 
     
     SUIContainer* rightElement;
     
+    SUIOpen(environment, &leftUIElement);
     SUIDock(hero, &leftUIElement, DOCK_LEFT, &temp, &rightElement);
     
+    SUIOpen(environment, &rightUIElement);
     SUIDock(rightElement, &rightUIElement, DOCK_COMPLETE, &temp, &temp);
     
     
     SUISetDimension(environment, width, height);
-    
-    
-    
-    
-    glfwMakeContextCurrent(glwindow);
     
     
     while (!glfwWindowShouldClose(glwindow))
