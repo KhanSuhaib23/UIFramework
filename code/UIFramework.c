@@ -570,6 +570,7 @@ void SUIDock(SUIEnvironment* environment, SUIContainer* container, SUIElement* e
         element->onDisplay = 1;
         
         container->first->element = element;
+        container->second->element = NULL;
         
     }
     else if (docType == DOCK_RIGHT)
@@ -584,6 +585,7 @@ void SUIDock(SUIEnvironment* environment, SUIContainer* container, SUIElement* e
         element->onDisplay = 1;
         
         container->second->element = element;
+        container->first->element = NULL;
     }
     else if (docType == DOCK_TOP)
     {
@@ -597,6 +599,7 @@ void SUIDock(SUIEnvironment* environment, SUIContainer* container, SUIElement* e
         element->onDisplay = 1;
         
         container->first->element = element;
+        container->second->element = NULL;
     }
     else if (docType == DOCK_BOTTOM)
     {
@@ -610,6 +613,7 @@ void SUIDock(SUIEnvironment* environment, SUIContainer* container, SUIElement* e
         element->onDisplay = 1;
         
         container->second->element = element;
+        container->first->element = NULL;
     }
 }
 

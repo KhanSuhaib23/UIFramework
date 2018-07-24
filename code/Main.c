@@ -1,4 +1,8 @@
-// TODO(Suhaib): Maybe move the buffer to the container
+// TODO(Suhaib): Undock
+// POPUP windows
+// TODO(Suhaib): Black hover box do correctly
+// TODO(Suhaib): Tabs
+
 
 #define GLEW_STATIC
 
@@ -150,6 +154,8 @@ int main()
         return -1;
     }
     
+    
+    
     //glfwSwapInterval(0);
     
     glfwSetFramebufferSizeCallback(glwindow, framebuffer_size_callback);
@@ -181,16 +187,19 @@ int main()
     SUIContainer* hero;
     SUIContainer* temp;
     
+    
     SUIOpen(environment, &bottomUIElement);
     SUIDock(environment, completeUI, &bottomUIElement, DOCK_BOTTOM, &hero, &temp); 
     
     SUIContainer* rightElement;
-    
     SUIOpen(environment, &leftUIElement);
-    SUIDock(environment, hero, &leftUIElement, DOCK_LEFT, &temp, &rightElement);
+    SUIDock(environment, hero, &leftUIElement, DOCK_LEFT, &temp, &rightElement); 
     
-    SUIOpen(environment, &rightUIElement);
+    
+    SUIOpen(environment, &rightUIElement); // this is creating problems check it
     SUIDock(environment, rightElement, &rightUIElement, DOCK_COMPLETE, &temp, &temp);
+    
+    
     
     
     SUISetDimension(environment, width, height);
@@ -198,6 +207,7 @@ int main()
     
     while (!glfwWindowShouldClose(glwindow))
     {
+        
         glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
         glClear(GL_COLOR_BUFFER_BIT);
         
@@ -223,4 +233,6 @@ int main()
     
     
     return 0;
+    
+    
 }
